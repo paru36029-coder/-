@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>理数科デジタル案内板 v5.0</title>
+    <style>
+        /* --- 全体設定 --- */
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            background-color: #2c3e50;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- ヘッダー --- */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            background: #34495e;
+            color: #ecf0f1;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            height: 110px;
+            z-index: 50;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        header h1 { 
+            margin: 0; 
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            flex: 1;
+            white-space: nowrap;
+        }
+
+        /* カウントダウン（画面中央） */
+        #nextClassContainer {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            width: 40%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        #nextClassName {
+            font-size: 1rem;
+            color: #bdc3c7;
+            margin-bottom: 2px;
+            display: block;
+            white-space: nowrap;
+        }
+
+        #nextClassTime {
+            font-size: clamp(1.5rem, 3vw, 2.5rem);
+            font-weight: bold;
+            color: #ff9f43;
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+        
+        /* 時計 */
+        #clock { 
+            flex: 1;
+            text-align: right;
+            font-size: clamp(2rem, 7vw, 4.5rem);
+            font-family: "Courier New", monospace;
+            font-weight: bold; 
+            color: #00cec9;
+            text-shadow: 0 0 10px rgba(0, 206, 201, 0.4);
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        /* --- メインエリア --- */
+        .main-container {
+            flex-grow: 1;
+            display: flex;
+            width: 100%;
+            height: calc(100vh - 110px);
+            padding: 20px;
+            box-sizing: border-box;
+            transition: all 0.5s ease;
+        }
+
+        /* --- アプリ一覧エリア --- */
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 20px;
+            width: 100%;
+            height: 100%;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* --- 緊急モード（最小化） --- */
+        .main-container.panic-mode .app-grid {
+            width: 200px;
+            grid-template-columns: 1fr;
+            grid-template-rows: repeat(auto-fill, 60px);
+            gap: 10px;
+            opacity: 0.6;
+            overflow-y: auto;
+            padding-right: 20px;
+            border-right: 2px solid #555;
+            pointer-events: none; /* クリック無効化 */
+            filter: grayscale(100%);
+        }
+        .main-container.panic-mode .app-card { flex-direction: row; justify-content: flex-start; padding: 5px 10px; }
+        .main-container.panic-mode .app-icon { font-size: 1.5rem; margin: 0 10px 0 0; }
+        .main-container.panic-mode .app-name { font-size: 0.8rem; text-align: left; -webkit-text-stroke: 0; text-shadow: none; color: white; }
+        .main-container.panic-mode .key-badge { transform: scale(0.7); top: 5px; left: 5px; }
+        .main-container.panic-mode .edit-btn, 
+        .main-container.panic-mode .delete-btn { display: none !important; }
+
+        /* --- アプリカード --- */
+        .app-card {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            width: 100%; height: 100%; border-radius: 15px; text-decoration: none; color: #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: transform 0.2s; position: relative; cursor: pointer;
+            user-select: none;
+        }
+        .app-card:hover { transform: scale(1.02); z-index: 10; }
+        .app-card:active { transform: scale(0.98); }
+        
+        .app-icon { font-size: 3.5rem; margin-bottom: 10px; }
+        .app-name {
+            font-size: 1.8rem; font-weight: 900; text-align: center; padding: 0 5px; line-height: 1.2; word-break: break-word;
+            color: white; -webkit-text-stroke: 1.5px black; paint-order: stroke fill; text-shadow: 2px 2px 0 #000; 
+        }
+
+        /* --- ボタン類 --- */
+        .key-badge {
+            position: absolute; top: 15px; left: 15px; width: 30px; height: 30px;
+            background: rgba(0, 0, 0, 0.6); color: #fff; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center; font-weight: bold;
+            font-family: monospace; font-size: 1.2rem; border: 2px solid rgba(255,255,255,0.5);
+            z-index: 15; pointer-events: none;
+        }
+        .delete-btn {
+            position: absolute; top: 10px; right: 10px; background: rgba(255,0,0,0.8);
+            color: white; border: none; border-radius: 50%; width: 32px; height: 32px;
+            cursor: pointer; display: none; z-index: 20; font-weight: bold; font-size: 1.2rem;
+            align-items: center; justify-content: center;
+        }
+        .app-card:hover .delete-btn { display: flex; }
+        .edit-btn {
+            position: absolute; top: 50px; left: 10px;
+            background: #2ecc71; color: white; border: none; border-radius: 50%; width: 32px; height: 32px;
+            cursor: pointer; display: none; z-index: 20; font-size: 1.2rem;
+            align-items: center; justify-content: center;
+        }
+        .app-card:hover .edit-btn { display: flex; }
+
+        /* --- カウントダウン(緊急) --- */
+        #countdownSection {
+            display: none; flex-grow: 1; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(0, 0, 0, 0.3); border-radius: 20px; margin-left: 20px; border: 5px solid red;
+            color: white; text-align: center; animation: pulse-bg 1s infinite alternate; box-shadow: 0 0 50px rgba(255, 0, 0, 0.5);
+        }
+        .main-container.panic-mode #countdownSection { display: flex; }
+        #timerTitle { font-size: 3rem; font-weight: bold; margin-bottom: 20px; color: #ff6b6b; text-shadow: 0 0 10px rgba(255,0,0,0.8); }
+        #timerValue {
+            font-size: 12rem; font-family: "Courier New", monospace; font-weight: bold; color: #fff;
+            text-shadow: 4px 4px 0px #c0392b; animation: shake 0.5s infinite;
+        }
+
+        @keyframes pulse-bg {
+            0% { background-color: rgba(50, 0, 0, 0.5); border-color: #c0392b; }
+            100% { background-color: rgba(100, 0, 0, 0.5); border-color: #ff0000; box-shadow: 0 0 80px red; }
+        }
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); } 50% { transform: translate(-1px, 2px) rotate(-1deg); } 100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        /* --- スライドショー --- */
+        #slideshowOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: black; z-index: 9999; display: none;
+            justify-content: center; align-items: center;
+            flex-direction: column;
+        }
+        #slideshowImage {
+            max-width: 100%; max-height: 85%;
+            object-fit: contain;
+            animation: fadeIn 1s ease-in-out;
+        }
+        #slideshowMessage {
+            margin-top: 20px; color: rgba(255, 255, 255, 0.8); font-size: 1.5rem; font-weight: bold; letter-spacing: 2px;
+            text-shadow: 0 2px 10px rgba(0,0,0,1); animation: pulseText 2s infinite; text-align: center;
+            position: absolute; bottom: 40px; background: rgba(0,0,0,0.4); padding: 10px 30px; border-radius: 50px;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pulseText { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+
+        /* --- 追加ボタン --- */
+        .fab {
+            position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px;
+            background: white; color: #333; border-radius: 50%; border: none; font-size: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; z-index: 100;
+            display: none; /* デフォルト非表示 */
+            align-items: center; justify-content: center;
+        }
+
+        /* --- モーダル --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 200;
+        }
+        .modal { background: white; padding: 25px; border-radius: 15px; width: 90%; max-width: 450px; max-height: 90vh; overflow-y: auto;}
+        
+        .form-group { margin-bottom: 15px; }
+        .form-group label { font-size: 0.9rem; font-weight: bold; display: block; margin-bottom: 5px;}
+        .form-group input[type="text"], .form-group input[type="color"], .form-group select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px;}
+        .checkbox-group { display: flex; align-items: center; gap: 10px; margin-top: 5px;}
+        .checkbox-group input { width: auto; transform: scale(1.2); }
+        
+        .modal-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; }
+        .btn { padding: 8px 16px; cursor: pointer; border-radius: 5px; border: none; font-weight: bold; font-size: 0.9rem;}
+        .btn-cancel { background: #95a5a6; color: white; }
+        .btn-save { background: #0984e3; color: white; }
+
+        .data-section { margin-top: 30px; padding-top: 20px; border-top: 2px dashed #ddd; }
+        .data-title { font-size: 1.1rem; font-weight: bold; color: #333; margin-bottom: 15px; border-left: 5px solid #0984e3; padding-left: 10px; }
+        .image-list { max-height: 150px; overflow-y: auto; border: 1px solid #eee; padding: 5px; margin-bottom: 10px; }
+        .image-item { display: flex; justify-content: space-between; align-items: center; padding: 5px; border-bottom: 1px solid #eee; font-size: 0.8rem; }
+        .image-preview { width: 40px; height: 40px; object-fit: cover; margin-right: 10px; border-radius: 3px; border: 1px solid #ddd;}
+        .btn-mini { padding: 2px 8px; font-size: 0.8rem; margin-left: 5px; background: #ff7675; color: white; border: none; border-radius: 3px; cursor: pointer;}
+        .file-input-container { display: flex; gap: 5px; align-items: center; }
+        .file-label { background: #eee; padding: 8px; border-radius: 5px; font-size: 0.8rem; cursor: pointer; border: 1px solid #ccc; text-align: center; flex-grow: 1; }
+        .file-label:hover { background: #ddd; }
+        .data-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 15px;}
+        .btn-export { background: #27ae60; color: white; }
+        .btn-import { background: #e67e22; color: white; }
+
+        /* --- 統計ログ用スタイル --- */
+        .stats-container {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        .stat-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eaeaea;
+        }
+        .stat-rank {
+            width: 25px;
+            font-weight: bold;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+        .stat-info {
+            flex-grow: 1;
+        }
+        .stat-name {
+            font-weight: bold;
+            font-size: 0.9rem;
+            color: #2c3e50;
+        }
+        .stat-bar-bg {
+            background: #dfe6e9;
+            height: 6px;
+            border-radius: 3px;
+            margin-top: 4px;
+            width: 100%;
+        }
+        .stat-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: #0984e3;
+        }
+        .stat-count {
+            font-weight: bold;
+            color: #0984e3;
+            margin-left: 10px;
+            width: 40px;
+            text-align: right;
+            font-size: 1rem;
+        }
+        .btn-reset { 
+            background: #7f8c8d; color: white; font-size: 0.8rem; margin-top: 10px; padding: 8px; width: 100%; 
+            border:none; border-radius:5px; cursor: pointer;
+        }
+        .btn-reset:hover { background: #95a5a6; }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>理数科デジタル案内板</h1>
+        
+        <div id="nextClassContainer">
+            <span id="nextClassName">--</span>
+            <div id="nextClassTime">--</div>
+        </div>
+
+        <div id="clock">--:--:--</div>
+    </header>
+
+    <div class="main-container" id="mainContainer">
+        <div class="app-grid" id="appGrid"></div>
+        <div id="countdownSection">
+            <div id="timerTitle">始業まで残り</div>
+            <div id="timerValue">00:00</div>
+        </div>
+    </div>
+
+    <div id="slideshowOverlay">
+        <img id="slideshowImage" src="" alt="Slideshow">
+        <div id="slideshowMessage">画面をタップまたはボタンを押してください</div>
+    </div>
+
+    <button class="fab" id="fabButton" onclick="openModal()">+</button>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <h2 style="margin-top:0;" id="modalTitle">アプリを追加</h2>
+            
+            <div class="form-group" style="background:#e8f4fd; padding:10px; border-radius:5px;">
+                <label>🔔 授業時制モード</label>
+                <select id="scheduleModeSelect" onchange="saveScheduleMode()">
+                    <option value="50">50分授業 (通常)</option>
+                    <option value="45">45分授業 (短縮)</option>
+                    <option value="50_morning">50分授業 (午前のみ)</option>
+                    <option value="45_morning">45分授業 (午前のみ)</option>
+                    <option value="remedial">補習時制</option>
+                </select>
+                
+                <div class="checkbox-group" style="margin-top:10px;">
+                    <input type="checkbox" id="countdownToggle" onchange="toggleCountdown()">
+                    <label for="countdownToggle" style="margin:0; font-weight:normal;">授業カウントダウンを表示</label>
+                </div>
+            </div>
+            
+            <div class="form-group"><label>アプリ名</label><input type="text" id="appName"></div>
+            <div class="form-group"><label>URL</label><input type="text" id="appUrl"></div>
+            <div class="form-group"><label>アイコン</label><input type="text" id="appIcon" value="📱"></div>
+            <div class="form-group"><label>色</label><input type="color" id="appColor" value="#00cec9" style="height:40px;"></div>
+            
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeModal()">閉じる</button>
+                <button class="btn btn-save" onclick="saveApp()">保存</button>
+            </div>
+
+            <div class="data-section">
+                <div class="data-title">📊 アプリ利用統計</div>
+                <div id="appStatsList" class="stats-container">
+                    </div>
+                <button class="btn btn-reset" onclick="resetAppStats()">カウントをリセット</button>
+            </div>
+
+            <div class="data-section">
+                <div class="data-title">スライドショー画像設定</div>
+                <div class="form-group">
+                    <label>URLで追加</label>
+                    <div style="display:flex; gap:5px;">
+                        <input type="text" id="slideUrl" placeholder="https://...">
+                        <button class="btn btn-save" onclick="addSlideByUrl()">追加</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>フォルダから選択 (自動圧縮)</label>
+                    <div class="file-input-container">
+                        <label for="slideFile" class="file-label">📁 写真を選択...</label>
+                        <input type="file" id="slideFile" accept="image/*" style="display:none;" onchange="handleFileSelect(this)">
+                        <span id="compressStatus" style="font-size:0.8rem; color:#e67e22;"></span>
+                    </div>
+                </div>
+                <div class="image-list" id="slideList"></div>
+            </div>
+            <div class="data-section">
+                <div class="data-title">データ管理</div>
+                <div class="data-buttons">
+                    <button class="btn btn-export" onclick="exportApps()">⬇ 保存</button>
+                    <button class="btn btn-import" onclick="document.getElementById('importFile').click()">⬆ 復元</button>
+                    <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importApps(this)">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const testMode = false; 
+
+        const slideInterval = 5000; 
+        const autoOpenHour = 15; 
+        const autoOpenUrl = '時刻表.html'; 
+
+        const schedules = {
+            '50': {
+                normal: [
+                    { name: "朝課外", time: "07:40" }, { name: "SHR", time: "08:40" },
+                    { name: "1時間目", time: "09:00" }, { name: "2時間目", time: "10:00" },
+                    { name: "3時間目", time: "11:05" }, { name: "4時間目", time: "12:05" },
+                    { name: "昼休み", time: "12:55" }, { name: "5時間目", time: "13:40" },
+                    { name: "6時間目", time: "14:40" }, { name: "清掃", time: "15:35" },
+                    { name: "終礼", time: "15:50" }, { name: "学習会", time: "16:05" },
+                    { name: "放課後課外", time: "17:05" }
+                ],
+                long: [
+                    { name: "朝課外", time: "07:40" }, { name: "SHR", time: "08:40" },
+                    { name: "1時間目", time: "09:00" }, { name: "2時間目", time: "10:00" },
+                    { name: "3時間目", time: "11:05" }, { name: "4時間目", time: "12:05" },
+                    { name: "昼休み", time: "12:55" }, { name: "5時間目", time: "13:40" },
+                    { name: "6時間目", time: "14:40" }, { name: "7時間目", time: "15:40" },
+                    { name: "清掃", time: "16:35" }, { name: "終礼", time: "16:50" },
+                    { name: "放課後課外", time: "17:05" }
+                ]
+            },
+            '45': {
+                normal: [
+                    { name: "朝課外", time: "07:40" }, { name: "SHR", time: "08:40" },
+                    { name: "1時間目", time: "09:00" }, { name: "2時間目", time: "09:55" },
+                    { name: "3時間目", time: "10:55" }, { name: "4時間目", time: "11:50" },
+                    { name: "昼休み", time: "12:35" }, { name: "5時間目", time: "13:20" },
+                    { name: "6時間目", time: "14:15" }, { name: "清掃", time: "15:05" },
+                    { name: "終礼", time: "15:20" }
+                ],
+                long: [
+                    { name: "朝課外", time: "07:40" }, { name: "SHR", time: "08:40" },
+                    { name: "1時間目", time: "09:00" }, { name: "2時間目", time: "09:55" },
+                    { name: "3時間目", time: "10:55" }, { name: "4時間目", time: "11:50" },
+                    { name: "昼休み", time: "12:35" }, { name: "5時間目", time: "13:20" },
+                    { name: "6時間目", time: "14:15" }, { name: "7時間目", time: "15:10" },
+                    { name: "清掃", time: "16:00" }, { name: "終礼", time: "16:15" }
+                ]
+            },
+            '50_morning': {
+                normal: [
+                    { name: "朝課外", time: "07:40" }, { name: "SHR", time: "08:40" },
+                    { name: "1時間目", time: "09:00" }, { name: "2時間目", time: "10:00" },
+                    { name: "3時間目", time: "11:05" }, { name: "4時間目", time: "12:05" },
+                    { name: "SHR/清掃", time: "12:55" }, { name: "完全下校", time: "13:10" }
+                ],
+                long: [ /* 午前のみモードには長短の区別がないため同じ設定 */
+                    { name: "朝課外", time: "07:40" }, { name: "SHR", time: "08:40" },
+                    { name: "1時間目", time: "09:00" }, { name: "2時間目", time: "10:00" },
+                    { name: "3時間目", time: "11:05" }, { name: "4時間目", time: "12:05" },
+                    { name: "SHR/清掃", time: "12:55" }, { name: "完全下校", time: "13:10" }
+                ]
+            },
+            '45_morning': {
+                normal: [
+                    { name: "朝課外", time: "07:40" }, { name: "SHR", time: "08:40" },
+                    { name: "1時間目", time: "09:00" }, { name: "2時間目", time: "09:55" },
+                    { name: "3時間目", time: "10:55" }, { name: "4時間目", time: "11:50" },
+                    { name: "SHR/清掃", time: "12:35" }, { name: "完全下校", time: "12:50" }
+                ],
+                long: [
+                    { name: "朝課外", time: "07:40" }, { name: "SHR", time: "08:40" },
+                    { name: "1時間目", time: "09:00" }, { name: "2時間目", time: "09:55" },
+                    { name: "3時間目", time: "10:55" }, { name: "4時間目", time: "11:50" },
+                    { name: "SHR/清掃", time: "12:35" }, { name: "完全下校", time: "12:50" }
+                ]
+            },
+            'remedial': {
+                normal: [
+                    { name: "1時間目", time: "08:50" }, 
+                    { name: "2時間目", time: "09:50" }, 
+                    { name: "3時間目", time: "10:50" }, 
+                    { name: "4時間目", time: "11:50" },
+                    { name: "完全下校", time: "12:50" }
+                ],
+                long: [
+                    { name: "1時間目", time: "08:50" }, 
+                    { name: "2時間目", time: "09:50" }, 
+                    { name: "3時間目", time: "10:50" }, 
+                    { name: "4時間目", time: "11:50" },
+                    { name: "完全下校", time: "12:50" }
+                ]
+            }
+        };
+
+        let apps = [];
+        let slideImages = []; 
+        let isPanicMode = false;
+        let slideshowTimer, slideTimer;
+
+        let currentSlideIndex = 0;
+        let editingIndex = null;
+        let currentScheduleMode = localStorage.getItem('scheduleMode') || '50';
+        let isCountdownVisible = localStorage.getItem('isCountdownVisible') !== 'false';
+
+        let appStats = {};
+
+        try { apps = JSON.parse(localStorage.getItem('myApps')) || []; } catch(e){}
+        try { slideImages = JSON.parse(localStorage.getItem('mySlideImages')) || []; } catch(e){}
+        try { appStats = JSON.parse(localStorage.getItem('appClickCounts')) || {}; } catch(e){}
+
+        const grid = document.getElementById('appGrid');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const slideshowOverlay = document.getElementById('slideshowOverlay');
+        const slideshowImgTag = document.getElementById('slideshowImage');
+        const mainContainer = document.getElementById('mainContainer');
+        const compressStatus = document.getElementById('compressStatus');
+        const fabButton = document.getElementById('fabButton');
+        const modalTitle = document.getElementById('modalTitle');
+        const nextClassNameElem = document.getElementById('nextClassName');
+        const nextClassTimeElem = document.getElementById('nextClassTime');
+        const nextClassContainer = document.getElementById('nextClassContainer');
+        const scheduleModeSelect = document.getElementById('scheduleModeSelect');
+        const countdownToggle = document.getElementById('countdownToggle');
+        
+        scheduleModeSelect.value = currentScheduleMode;
+        countdownToggle.checked = isCountdownVisible;
+        nextClassContainer.style.display = isCountdownVisible ? 'flex' : 'none';
+
+        renderApps();
+
+        // キーボードショートカット
+        document.addEventListener('keydown', (e) => {
+            if (e.repeat) return; 
+
+            // Ctrl + Shift で +ボタンの表示切替
+            if (e.ctrlKey && e.shiftKey) {
+                const fab = document.getElementById('fabButton');
+                fab.style.display = (fab.style.display === 'none' || getComputedStyle(fab).display === 'none') ? 'flex' : 'none';
+                return; 
+            }
+
+            if (modalOverlay.style.display !== 'flex' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const key = e.key;
+                if ((key >= '1' && key <= '9') || key === '0') {
+                    const index = (key === '0') ? 9 : parseInt(key) - 1;
+                    if (apps[index]) openApp(apps[index].url, apps[index].name);
+                }
+            }
+        });
+
+        function renderApps() {
+            grid.innerHTML = '';
+            apps.forEach((app, index) => {
+                const card = document.createElement('div');
+                card.className = 'app-card';
+                card.style.backgroundColor = app.color;
+                
+                card.onclick = function() { openApp(app.url, app.name); };
+
+                const shortcutNum = (index + 1) % 10;
+                card.innerHTML = `
+                    <div class="key-badge">${shortcutNum}</div>
+                    <div class="app-icon">${app.icon}</div>
+                    <div class="app-name">${app.name}</div>
+                    <button class="edit-btn" onclick="editApp(event, ${index})">✏️</button>
+                    <button class="delete-btn" onclick="deleteApp(event, ${index})">×</button>
+                `;
+                grid.appendChild(card);
+            });
+        }
+        
+        function openApp(url, appName) {
+            // カウントダウン（ロック）中は開かない
+            if(isPanicMode) {
+                alert("現在、始業前のため操作はロックされています。");
+                return;
+            }
+
+            if(appName) {
+                if(!appStats[appName]) appStats[appName] = 0;
+                appStats[appName]++;
+                localStorage.setItem('appClickCounts', JSON.stringify(appStats));
+            }
+            if(url) window.location.href = url;
+        }
+
+        function resetAppStats() {
+            if(confirm('全ての集計データをリセットしますか？')) {
+                appStats = {};
+                localStorage.removeItem('appClickCounts');
+                renderStats(); 
+            }
+        }
+
+        function renderStats() {
+            const container = document.getElementById('appStatsList');
+            container.innerHTML = '';
+
+            const keys = Object.keys(appStats);
+            if(keys.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#999; padding:10px;">データがありません</div>';
+                return;
+            }
+
+            keys.sort((a, b) => appStats[b] - appStats[a]);
+            const maxVal = appStats[keys[0]] || 1; 
+
+            keys.forEach((name, index) => {
+                const count = appStats[name];
+                const percent = (count / maxVal) * 100;
+                
+                const row = document.createElement('div');
+                row.className = 'stat-row';
+                row.innerHTML = `
+                    <div class="stat-rank">${index + 1}</div>
+                    <div class="stat-info">
+                        <div class="stat-name">${name}</div>
+                        <div class="stat-bar-bg">
+                            <div class="stat-bar-fill" style="width:${percent}%"></div>
+                        </div>
+                    </div>
+                    <div class="stat-count">${count}</div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function saveScheduleMode() {
+            currentScheduleMode = scheduleModeSelect.value;
+            localStorage.setItem('scheduleMode', currentScheduleMode);
+            updateClock();
+        }
+
+        function toggleCountdown() {
+            isCountdownVisible = countdownToggle.checked;
+            localStorage.setItem('isCountdownVisible', isCountdownVisible);
+            nextClassContainer.style.display = isCountdownVisible ? 'flex' : 'none';
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            calculateNextClass(now);
+
+            // カウントダウン(PanicMode)のロジック
+            let target1, target2;
+            let windowMs; // 何分前からカウントダウンするか
+
+            if (currentScheduleMode === 'remedial') {
+                // 補習モード: 8:50開始の20分前から
+                target1 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 50, 0);
+                target2 = null; // 補習は朝課外などがない前提で1回のみ設定
+                windowMs = 20 * 60 * 1000; // 20分前
+            } else {
+                // 通常/短縮/午前: 7:40 と 8:40 の10分前から
+                target1 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 40, 0);
+                target2 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 40, 0);
+                windowMs = 10 * 60 * 1000; // 10分前
+            }
+            
+            let activeTarget = null;
+            if (target1 && target1 - now <= windowMs && target1 - now > 0) activeTarget = target1;
+            else if (target2 && target2 - now <= windowMs && target2 - now > 0) activeTarget = target2;
+
+            const timerValue = document.getElementById('timerValue');
+            if (testMode || activeTarget) {
+                // Panic Mode (カウントダウン中) に入る場合
+                if (!isPanicMode) { 
+                    isPanicMode = true; 
+                    stopSlideshow(); 
+                }
+                mainContainer.classList.add('panic-mode');
+                const diff = (testMode ? (new Date().setMinutes(new Date().getMinutes() + 1)) : activeTarget) - now;
+                const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const s = Math.floor((diff % (1000 * 60)) / 1000);
+                timerValue.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            } else {
+                // Panic Mode 解除
+                if (isPanicMode) {
+                    isPanicMode = false; 
+                    mainContainer.classList.remove('panic-mode');
+                }
+            }
+        }
+
+        function calculateNextClass(now) {
+            const day = now.getDay();
+            if (day === 0 || day === 6) {
+                nextClassNameElem.textContent = "休 日";
+                nextClassTimeElem.textContent = "--:--:--";
+                return;
+            }
+
+            // 新モード（remedialなど）には 'long' が無い場合でも動くように、なければ 'normal' を使う
+            const type = (day === 2 || day === 4) ? 'long' : 'normal';
+            let todaySchedule = schedules[currentScheduleMode][type];
+            // 念のためフォールバック
+            if (!todaySchedule) todaySchedule = schedules[currentScheduleMode]['normal'];
+
+            let nextEvent = null;
+            
+            for (let event of todaySchedule) {
+                const [h, m] = event.time.split(':').map(Number);
+                const eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+                if (eventDate > now) {
+                    nextEvent = { name: event.name, date: eventDate };
+                    break;
+                }
+            }
+
+            if (nextEvent) {
+                nextClassNameElem.textContent = nextEvent.name + "まで";
+                const diffMs = nextEvent.date - now;
+                const m = Math.floor(diffMs / (1000 * 60));
+                const s = Math.floor((diffMs % (1000 * 60)) / 1000);
+                nextClassTimeElem.textContent = `あと ${m}分 ${String(s).padStart(2, '0')}秒`;
+            } else {
+                nextClassNameElem.textContent = "本日の日程";
+                nextClassTimeElem.textContent = "終了";
+            }
+        }
+
+        setInterval(updateClock, 1000); updateClock();
+
+        function checkAndRedirect() {
+            const now = new Date();
+            if (now.getHours() >= autoOpenHour) window.location.href = autoOpenUrl;
+        }
+
+        function startSlideshow() {
+            if (slideImages.length === 0 || isPanicMode) return;
+            slideshowOverlay.style.display = 'flex';
+            currentSlideIndex = 0; showNextSlide();
+            slideTimer = setInterval(showNextSlide, slideInterval);
+        }
+        function stopSlideshow() { slideshowOverlay.style.display = 'none'; clearInterval(slideTimer); }
+        function showNextSlide() {
+            if (slideImages.length === 0) return;
+            slideshowImgTag.src = slideImages[currentSlideIndex];
+            currentSlideIndex = (currentSlideIndex + 1) % slideImages.length;
+        }
+
+        function compressImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader(); reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image(); img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                        const maxWidth = 1024; const maxHeight = 1024;
+                        let w = img.width; let h = img.height;
+                        if (w > h) { if (w > maxWidth) { h *= maxWidth / w; w = maxWidth; } }
+                        else { if (h > maxHeight) { w *= maxHeight / h; h = maxHeight; } }
+                        canvas.width = w; canvas.height = h; ctx.drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', 0.6));
+                    }; img.onerror = (err) => reject(err);
+                }; reader.onerror = (err) => reject(err);
+            });
+        }
+        async function handleFileSelect(input) {
+            const file = input.files[0]; if (!file) return;
+            compressStatus.textContent = "圧縮中...";
+            try {
+                const url = await compressImage(file); addImage(url);
+                compressStatus.textContent = "完了!"; setTimeout(() => { compressStatus.textContent = ""; }, 2000);
+            } catch (e) { alert("失敗"); } input.value = ''; 
+        }
+
+        function openModal() {
+            editingIndex = null;
+            modalTitle.textContent = "アプリを追加";
+            document.getElementById('appName').value = '';
+            document.getElementById('appUrl').value = '';
+            document.getElementById('appIcon').value = '📱';
+            document.getElementById('appColor').value = '#00cec9';
+            renderSlideList();
+            renderStats(); // 統計を表示
+            modalOverlay.style.display = 'flex';
+        }
+        function editApp(e, index) {
+            // カウントダウン（ロック）中は編集ボタンも効かないようにする
+            if(isPanicMode) {
+                e.preventDefault(); e.stopPropagation();
+                alert("現在、始業前のため操作はロックされています。");
+                return;
+            }
+            e.preventDefault(); e.stopPropagation(); 
+            editingIndex = index;
+            modalTitle.textContent = "アプリを編集";
+            const app = apps[index];
+            document.getElementById('appName').value = app.name;
+            document.getElementById('appUrl').value = app.url;
+            document.getElementById('appIcon').value = app.icon;
+            document.getElementById('appColor').value = app.color;
+            renderSlideList();
+            renderStats(); // 統計を表示
+            modalOverlay.style.display = 'flex';
+        }
+        function closeModal() { modalOverlay.style.display = 'none'; }
+        
+        function saveApp() {
+            const name = document.getElementById('appName').value;
+            const url = document.getElementById('appUrl').value;
+            const icon = document.getElementById('appIcon').value;
+            const color = document.getElementById('appColor').value;
+
+            if (!name || !url) return alert('入力してください');
+            const appData = { name, url, icon, color };
+            if (editingIndex !== null) { apps[editingIndex] = appData; } else { apps.push(appData); }
+            try { localStorage.setItem('myApps', JSON.stringify(apps)); } catch(e){ alert("容量エラー"); if(editingIndex===null) apps.pop();}
+            renderApps(); closeModal();
+        }
+        
+        function deleteApp(e, i) {
+            if(isPanicMode) return; // ロック中
+            e.preventDefault(); e.stopPropagation(); 
+            if(confirm('削除？')) { apps.splice(i, 1); try{localStorage.setItem('myApps', JSON.stringify(apps));}catch(e){} renderApps(); }
+        }
+        
+        function addSlideByUrl() {
+            const url = document.getElementById('slideUrl').value; if (!url) return;
+            addImage(url); document.getElementById('slideUrl').value = '';
+        }
+        
+        function addImage(data) {
+            try { slideImages.push(data); localStorage.setItem('mySlideImages', JSON.stringify(slideImages)); renderSlideList(); } catch(e) { slideImages.pop(); alert("容量一杯"); }
+        }
+        
+        function renderSlideList() {
+            const list = document.getElementById('slideList'); list.innerHTML = '';
+            slideImages.forEach((url, i) => {
+                const item = document.createElement('div'); item.className = 'image-item';
+                item.innerHTML = `<div style="display:flex;align-items:center;overflow:hidden;"><img src="${url}" class="image-preview"><span>Image ${i+1}</span></div><button class="btn-mini" onclick="deleteSlideImage(${i})">削除</button>`;
+                list.appendChild(item);
+            });
+        }
+        
+        function deleteSlideImage(i) {
+            slideImages.splice(i, 1); localStorage.setItem('mySlideImages', JSON.stringify(slideImages)); renderSlideList();
+        }
+        
+        modalOverlay.addEventListener('click', (e) => { if(e.target===modalOverlay) closeModal(); });
+        
+        function exportApps() {
+            const exportData = { apps: apps, slides: slideImages, scheduleMode: currentScheduleMode, isCountdownVisible: isCountdownVisible }; 
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
+            const a = document.createElement('a'); const d = new Date();
+            a.href = dataStr; a.download = `hub_backup_${d.getFullYear()}${d.getMonth()+1}${d.getDate()}.json`;
+            document.body.appendChild(a); a.click(); a.remove();
+        }
+        
+        function importApps(input) {
+            const file = input.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.apps) { 
+                        if(confirm('復元しますか？')) { 
+                            apps = data.apps; slideImages = data.slides || []; 
+                            currentScheduleMode = data.scheduleMode || '50'; scheduleModeSelect.value = currentScheduleMode;
+                            isCountdownVisible = data.isCountdownVisible !== false; countdownToggle.checked = isCountdownVisible;
+                            toggleCountdown();
+                            localStorage.setItem('mySlideImages', JSON.stringify(slideImages)); localStorage.setItem('scheduleMode', currentScheduleMode);
+                            localStorage.setItem('isCountdownVisible', isCountdownVisible);
+                        } 
+                    } else if (Array.isArray(data)) { if(confirm('アプリのみ復元？')) apps = data; }
+                    localStorage.setItem('myApps', JSON.stringify(apps)); renderApps(); alert('完了'); closeModal();
+                } catch(err) { alert('失敗'); }
+                input.value = ''; 
+            }; reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
